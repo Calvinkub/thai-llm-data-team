@@ -13,6 +13,9 @@ datasketch>=1.6,<2.0
 # Progress bars
 tqdm>=4.66,<5.0
 
+# Parquet I/O
+pyarrow>=16.0,<20.0
+
 # Hashing / compression (stdlib gzip/hashlib used directly, no extra dep)
 
 # CLI / config (stdlib argparse used directly)
