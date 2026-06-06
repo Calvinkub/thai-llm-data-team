@@ -12,6 +12,8 @@ from typing import Any, Iterator
 
 from tqdm import tqdm
 
+from spam_filter import filter_batch
+
 # ------------------------------------------------------------------
 # Constants
 # ------------------------------------------------------------------
@@ -161,12 +163,21 @@ def main() -> int:
             continue
         kept_docs.append(schema_doc)
 
-    write_jsonl_gz(output_path, kept_docs)
+    clean_docs, spam_docs = filter_batch(kept_docs)
 
-    kept = len(kept_docs)
+    write_jsonl_gz(output_path, clean_docs)
+
+    # Write spam sidecar for audit (censored matches only)
+    if spam_docs:
+        spam_path = output_path.with_suffix("").with_suffix(".spam.jsonl.gz")
+        write_jsonl_gz(spam_path, spam_docs)
+
+    kept = len(clean_docs)
+    spam_count = len(spam_docs)
     print(f"\nSummary")
     print(f"  Input docs   : {total:,}")
     print(f"  Skipped      : {skipped:,}  (empty or no text field)")
+    print(f"  Spam filtered: {spam_count:,}  (saved to .spam.jsonl.gz for audit)")
     print(f"  Written      : {kept:,}")
     print(f"  Output path  : {output_path}")
 
