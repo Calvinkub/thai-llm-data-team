@@ -1,0 +1,27 @@
+# Thai Foundation LLM Data Pipeline - Python dependencies
+# Pin major.minor versions; patch versions float for security patches.
+
+# NLP / Thai language
+pythainlp>=5.0,<6.0
+
+# Text quality and normalization
+ftfy>=6.2,<7.0
+
+# MinHash / approximate dedup (optional, for future near-dedup step)
+datasketch>=1.6,<2.0
+
+# Progress bars
+tqdm>=4.66,<5.0
+
+# Hashing / compression (stdlib gzip/hashlib used directly, no extra dep)
+
+# CLI / config (stdlib argparse used directly)
+
+# Testing
+pytest>=8.0,<9.0
+pytest-cov>=5.0,<6.0
+
+# Linting and formatting (dev only)
+ruff>=0.4,<1.0
+mypy>=1.10,<2.0
+black>=24.0,<25.0
