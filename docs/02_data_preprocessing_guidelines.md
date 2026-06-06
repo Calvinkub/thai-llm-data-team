@@ -30,6 +30,13 @@ SSD Raw Data (4 datasets, ~600 GB)
   - Re-shard to standard 50k docs / ~256 MB
          |
          v
+[Stage 2.5] Spam & Adult Content Filter  ← NEW, runs automatically inside convert_to_schema.py
+  - Blocks Thai gambling keywords: บาคาร่า, หวยออนไลน์, แทงบอล, คาสิโนออนไลน์, สล็อตออนไลน์ + 15 more
+  - Blocks adult/gambling domains (stored as prxxxhub.com style in logs)
+  - Flagged docs go to .spam.jsonl.gz sidecar — NOT silently deleted
+  - quality_flags gets "spam_filter" tag on flagged docs
+         |
+         v
 [Stage 3] Cross-Dataset Dedup
   - Exact dedup (sha256) across ALL four datasets combined
   - Remove exact duplicates between SEAPILE and THAILLM (high overlap risk)
@@ -151,6 +158,106 @@ with gzip.open(INPUT, "rt", encoding="utf-8") as fin, \
         fout.write(json.dumps(doc, ensure_ascii=False) + "\n")
 
 print(f"Done: {OUTPUT}")
+```
+
+---
+
+## 4.5 Stage 2.5: Spam and Adult Content Filter
+
+> **This runs automatically** when you call `convert_to_schema.py`. You do not need to run it separately. Read this section so you understand what it does and what to do when it flags something.
+
+### What it filters
+
+The filter catches two categories of unwanted content:
+
+**Thai gambling / spam keywords** (keyword density check — a news article mentioning gambling once is fine; a spam page stuffed with these is dropped):
+
+| Thai keyword | English meaning |
+|---|---|
+| บาคาร่า / บาคาร่าออนไลน์ | Baccarat / online baccarat |
+| หวยออนไลน์ / หวยลาว / หวยฮานอย | Online lottery |
+| แทงบอล / แทงบอลออนไลน์ | Football betting |
+| คาสิโนออนไลน์ | Online casino |
+| สล็อตออนไลน์ / สล็อตแตกง่าย | Online slots |
+| พนันออนไลน์ | Online gambling |
+| แจกเครดิตฟรี / กดรับโบนัส | Free credit / bonus spam |
+| เว็บพนัน / โปรโมชั่นสล็อต | Gambling site / slot promotions |
+| + 8 more Thai spam phrases | |
+
+**Blocked domains** (any document whose source URL or body text contains these):
+
+| Displayed in logs | Category |
+|---|---|
+| prxxxhub.com | Adult |
+| xvixxxos.com | Adult |
+| xhxxxster.com | Adult |
+| livejxxxin.com | Adult |
+| chaxxxate.com | Adult |
+| onlyfxxx.com | Adult |
+| gcxxx.com, bxtflix.co, uxxa.bet | Thai gambling sites |
+| saxame.com, vexxx168.com | Thai gambling sites |
+
+> Blocked sites are **censored in all logs and reports** so this document and codebase are safe to share publicly.
+
+### What happens to flagged documents
+
+Flagged docs are **NOT silently deleted**. Instead:
+
+```
+shard_000.jsonl.gz          <- clean docs only (goes to Model team)
+shard_000.spam.jsonl.gz     <- flagged docs with reasons (for your audit)
+```
+
+Each flagged doc in the sidecar has two extra fields:
+```json
+{
+  "quality_flags": ["spam_filter"],
+  "_spam_reasons": ["spam_keywords"],
+  "_spam_matches": ["kw:บxxxาร่า", "kw:แxxxบอล", "kw:คxxxโน"]
+}
+```
+
+### Worker action required
+
+After running `convert_to_schema.py`, check if a `.spam.jsonl.gz` was produced:
+
+```bash
+# Check how many docs were flagged
+zcat ./shards/thaillm/shard_000.spam.jsonl.gz | wc -l
+```
+
+- **Spam rate < 5%:** normal, no action needed. Log the count in the Google Sheet.
+- **Spam rate 5-20%:** spot-check 10 flagged docs. If correct, log and move on.
+- **Spam rate > 20%:** escalate to Calvin. The source shard may have a systematic issue.
+
+```python
+# Quick spot-check of flagged docs
+import json, gzip
+
+with gzip.open("./shards/thaillm/shard_000.spam.jsonl.gz", "rt") as f:
+    for i, line in enumerate(f):
+        doc = json.loads(line)
+        print(f"--- Doc {i} ---")
+        print(f"Reasons : {doc['_spam_reasons']}")
+        print(f"Matches : {doc['_spam_matches']}")   # already censored
+        print(f"Text    : {doc['text'][:120]}")
+        print()
+        if i >= 9:
+            break
+```
+
+### Running the filter standalone (optional)
+
+```python
+from spam_filter import check_spam
+
+result = check_spam(
+    text="บาคาร่าออนไลน์ สมัครรับโบนัสฟรี แทงบอลได้เลย",
+    url="https://gclub.com/register"
+)
+print(result.is_spam)          # True
+print(result.reasons)          # ['blocked_source_domain', 'spam_keywords']
+print(result.censored_matches) # ['domain:gcxxx.com', 'kw:บxxxาร่า', ...]
 ```
 
 ---
@@ -317,11 +424,13 @@ Stats sidecar (`.stats.json`):
 ## 9. Per-Worker Checklist (Run for Every Shard)
 
 - [ ] `validator_input.py` — PASS on raw input shard
-- [ ] `convert_to_schema.py` — unified schema output written
+- [ ] `convert_to_schema.py` — unified schema output written (spam filter runs automatically)
+- [ ] Check spam sidecar: `zcat shard_NNN.spam.jsonl.gz | wc -l` — log count in Google Sheet
+- [ ] If spam rate > 20%, escalate to Calvin before continuing
 - [ ] `dedup_exact.py` — duplicates removed (for web sources)
 - [ ] `validator.py` — PASS on output shard
 - [ ] `.stats.json` sidecar written
-- [ ] Shard row added to Google Sheet (path, n_docs, n_tokens_est, validator status)
+- [ ] Shard row added to Google Sheet (path, n_docs, n_spam_filtered, n_tokens_est, validator status)
 - [ ] Human spot-check: 50 random docs, defect rate < 2%
 - [ ] SHA256 checksum added to `SHA256SUMS` file
 
