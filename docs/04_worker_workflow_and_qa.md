@@ -21,7 +21,7 @@
 1. **T+0:15** — Confirm SSD paths with MLDevOps, assign squads, start `validator_input.py` on first shard of each dataset
 2. **T+0:15–T+1:30** — 4 squads in parallel: `convert_to_schema.py` → unified JSONL.gz output
 3. **T+1:30–T+2:15** — Cross-dedup (SEAPILE x THAILLM), run `validator.py` on all output shards, human spot-check
-4. **T+2:15** — Calvin runs `corpus_stats.py` + generates `manifest.json` + `SHA256SUMS`
+4. **T+2:15** — runs `corpus_stats.py` + generates `manifest.json` + `SHA256SUMS`
 5. **T+2:30** — Sign and hand off `HANDOFF_batch1.md` to Model team
 
 **Submit to:** Camp HuggingFace org + GitHub repo ONLY (announced at Role Orientation).
